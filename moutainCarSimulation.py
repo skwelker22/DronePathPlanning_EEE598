@@ -12,6 +12,7 @@ obs = env.reset()
 for step in range(num_steps):
     # take random action, but you can also do something more intelligent
     # action = my_intelligent_agent_fn(obs) 
+    print(env.observation_space)
     action = env.action_space.sample()
     
     # apply the action
