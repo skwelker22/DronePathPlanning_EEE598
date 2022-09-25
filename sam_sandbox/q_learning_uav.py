@@ -19,59 +19,64 @@ import numpy as np
 import random
 import matplotlib.pyplot as plt
 
-#define and reset environment
-env = UAV()
-
 # Hyper parameters
-alpha = 0.1 #learning rate
-gamma = 0.6 #discount factor
-epsilon = 0.1 #for epsilon-greedy
+alpha = 0.4 #learning rate
+alpha_low = 100
+beta = 25
+gamma = 0.2 #discount factor
+epsilon = 0.25 #for epsilon-greedy
+lamb = 0.9 #discount factor
+T0 = 1e2 #initial value of temp param
+max_iter = 1e3
 nEpisodes = 10000
 
+#define and reset environment
+env = UAV(lamb, T0, alpha_low, beta)
+
 #initialize q table
-n_states = int(( (0.9-0.1) * float(env.observation_space.shape[0]) ) * float(env.observation_space.shape[1]))
+n_states = env.observation_space.shape[0]
 n_actions = env.action_space.n
-q_table = np.zeros([n_states, n_actions])
+n_dims = 2
+q_table = np.zeros([n_states, n_states, n_actions])
 
 all_epochs, all_penalties = [list() for i in range(2)]
 
 for i in range(1, nEpisodes):
     #reset and render
-    state_grid = env.reset()
+    state_grid = env.reset(i)
     state_x, state_y = env.drone.get_position()
-    del_grid_y = env.y_max - env.y_min
     
-    #translate position into row number in the q-table
-    state_idx = state_x * del_grid_y + state_y
-    
+    #reinit current episode vars
     epochs, penalties, reward = [0 for i in range(3)]
     done = False
     
     while not done:
         #epsilon greedy strategy for action decision
-        if random.uniform(0,1) < epsilon:
+        U = random.uniform(0,1)
+        if U < epsilon:
             action = env.action_space.sample() #explore action space
         else:
-            action = np.argmax(q_table[state_idx]) #eploit learned values
+            #action = env.genBoltzmann(q_table[state_x, state_y], U, epochs)
+            action = np.argmax(q_table[state_x, state_y]) #eploit learned values
 
         #state transition
         state_dot_grid, reward, done, _ = env.step(action)
         state_dot_x, state_dot_y = env.drone.get_position()
-        state_dot_idx = state_dot_x * del_grid_y + state_dot_y
         
-        old_value = q_table[state_idx, action]
-        next_max = np.max(q_table[state_dot_idx])
+        old_value = q_table[state_x, state_y, action]
+        next_max = np.max(q_table[state_x, state_y])
         
         #q update
         new_value = (1-alpha) * old_value + alpha * (reward + gamma * next_max)
-        q_table[state_idx, action] = new_value
+        q_table[state_x, state_y, action] = new_value
         
-        #check reward and apply penalties if needed
-        if reward == -10:
-            penalties += 1
-        
-        state_idx = state_dot_idx
+        #pass new states into old
+        state_x, state_y = state_dot_x, state_dot_y
         epochs += 1
+        
+        #if we have reached max iterations or collided with an object
+        if epochs > max_iter or env.check_obj_collided():
+            done = True
     
         #render drone/target
         env.render()
