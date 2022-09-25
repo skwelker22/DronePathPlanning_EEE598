@@ -23,12 +23,12 @@ import matplotlib.pyplot as plt
 alpha = 0.4 #learning rate
 alpha_low = 100
 beta = 25
-gamma = 0.2 #discount factor
-epsilon = 0.25 #for epsilon-greedy
+gamma = 0.6 #discount factor
+epsilon = 0.15 #for epsilon-greedy
 lamb = 0.9 #discount factor
 T0 = 1e2 #initial value of temp param
 max_iter = 1e3
-nEpisodes = 10000
+nEpisodes = 5000
 
 #define and reset environment
 env = UAV(lamb, T0, alpha_low, beta)
@@ -64,7 +64,7 @@ for i in range(1, nEpisodes):
         state_dot_x, state_dot_y = env.drone.get_position()
         
         old_value = q_table[state_x, state_y, action]
-        next_max = np.max(q_table[state_x, state_y])
+        next_max = np.max(q_table[state_dot_x, state_dot_y])
         
         #q update
         new_value = (1-alpha) * old_value + alpha * (reward + gamma * next_max)
@@ -77,6 +77,7 @@ for i in range(1, nEpisodes):
         #if we have reached max iterations or collided with an object
         if epochs > max_iter or env.check_obj_collided():
             done = True
+            epochs = max_iter
     
         #render drone/target
         env.render()
