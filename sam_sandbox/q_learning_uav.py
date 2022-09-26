@@ -20,15 +20,15 @@ import random
 import matplotlib.pyplot as plt
 
 # Hyper parameters
-alpha = 0.4 #learning rate
-alpha_low = 100
-beta = 25
+alpha = 0.3 #learning rate
+alpha_low = 0.1
+beta = 5
 gamma = 0.6 #discount factor
-epsilon = 0.15 #for epsilon-greedy
+epsilon = 0.07 #for epsilon-greedy
 lamb = 0.9 #discount factor
-T0 = 1e2 #initial value of temp param
-max_iter = 1e3
-nEpisodes = 5000
+T0 = 1e3 #initial value of temp param
+max_iter = 500
+nEpisodes = int(1e3)
 
 #define and reset environment
 env = UAV(lamb, T0, alpha_low, beta)
@@ -56,7 +56,7 @@ for i in range(1, nEpisodes):
         if U < epsilon:
             action = env.action_space.sample() #explore action space
         else:
-            #action = env.genBoltzmann(q_table[state_x, state_y], U, epochs)
+            #action = env.genBoltzmann(q_table[state_x, state_y], U, i)
             action = np.argmax(q_table[state_x, state_y]) #eploit learned values
 
         #state transition
@@ -78,6 +78,7 @@ for i in range(1, nEpisodes):
         if epochs > max_iter or env.check_obj_collided():
             done = True
             epochs = max_iter
+            penalties += 1
     
         #render drone/target
         env.render()
