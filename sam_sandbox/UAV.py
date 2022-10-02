@@ -7,18 +7,15 @@ Main Reference: https://blog.paperspace.com/creating-custom-environments-openai-
 @author: skwel
 """
 
-import gym
 from gym import Env, spaces
 import numpy as np
 import cv2
 import random
-import matplotlib.pyplot as plt
-import time
-from math import exp, sqrt
+from math import exp, sqrt, atan2, pi, asin, sin
 
 class UAV(Env):
     
-    def __init__(self, lamb, T0, alpha_low, beta):
+    def __init__(self, lamb, T0, alpha_low, beta, b1, b2, b3):
         super(UAV, self).__init__()
         
         #boltzman probability parameters
@@ -28,6 +25,9 @@ class UAV(Env):
         self.beta = beta
         self.obj_collided = False
         self.reward = 0
+        self.b1 = b1
+        self.b2 = b2
+        self.b3 = b3
         
         """
         Action (low) space defined as:
@@ -91,15 +91,11 @@ class UAV(Env):
         assert mode in ["human", "rgb_array"], \
             "Invalid mode, must be either \"human\" or \"rgb_array\""
         if mode == "human":
-            cv2.imshow("Game", self.canvas)
+            cv2.imshow("Simple Drone Simulator", self.canvas)
             cv2.waitKey(10)
         
         elif mode == "rgb_array":
             return self.canvas
-        
-    #dictionary that maps numbers to "action definitions"
-    def get_action_meanings(self):
-        return {0: "Right", 1: "Left", 2: "Down", 3: "Up", 4: "Do Nothing"}
     
     #check if two point objects have collided
     def has_collided(self, elem1, elem2):
@@ -126,7 +122,11 @@ class UAV(Env):
         
         assert self.action_space.contains(action), "Invalid Action"
         
+        #initialize dynamic states
+        R_obs, D_obs, R_targ, A_targ_obs = [None for i in range(4)]
+        
         reward = 0
+        reward_high = 0
         penalties = 0
         
         #calculate current distance from uav to target
@@ -158,7 +158,6 @@ class UAV(Env):
             self.drone.move(-5,-5)
         elif action == 8:
             self.drone.move(0,0)
-            
         
         #calculate the distance after action
         x_drone_dot, y_drone_dot = self.drone.get_position()
@@ -183,15 +182,16 @@ class UAV(Env):
         for obj in self.obs:
             if self.has_collided(self.drone, obj):
                 self.obj_collided = True
-                #reward = reward - 1e5
                 break
         
         #move moving obstacle (just move up and down for simplicity)
         #get current position
-        curr_obs_x, _ = self.moving_obs.get_position()
-        if curr_obs_x < int(self.observation_shape[0] * 0.40):
+        curr_move_obs_x, curr_move_obs_y = self.moving_obs.get_position()
+        d_uo = self.calcDistance(x_drone_dot, curr_move_obs_x, y_drone_dot, curr_move_obs_y)
+        
+        if curr_move_obs_x < int(self.observation_shape[0] * 0.40):
             self.moving_obs.set_move_dir(0)
-        elif curr_obs_x > int(self.observation_shape[0] * 0.85):
+        elif curr_move_obs_x > int(self.observation_shape[0] * 0.85):
             self.moving_obs.set_move_dir(1)
         
         if self.moving_obs.move_dir == 0:
@@ -199,25 +199,47 @@ class UAV(Env):
         elif self.moving_obs.move_dir == 1:
             self.moving_obs.move(-5, 0)
         
+        next_move_obs_x, next_move_obs_y = self.moving_obs.get_position()
+        d_uo_plus = self.calcDistance(x_drone_dot, next_move_obs_x, y_drone_dot, next_move_obs_y)
+        
+        #check if the moving obstacle is in the sensor FOV
+        R_obs, D_obs, R_targ, A_targ_obs = \
+            self.drone.checkSensor(self.moving_obs, self.target)
+        
+        obstacle_in_fov = self.drone.checkObsInFov()
+        s_high = []
+        if obstacle_in_fov == True:
+            s_high.append(R_obs)
+            s_high.append(D_obs)
+            s_high.append(R_targ)
+            s_high.append(A_targ_obs)
+            
+            #get current alpha
+            alpha_o_line = self.drone.getAlpha()
+            
+            #calculate high layer reward
+            reward_high = self.b1 * (d_s_minus - d_s) + \
+                exp(self.b2 * (d_uo - d_uo_plus)) + \
+                self.b3 * sin(alpha_o_line)
+        
         #check collisions with moving obstacle
         if self.has_collided(self.drone, self.moving_obs):
             self.obj_collided = True
-            #reward = reward - 1e5
         
-        #increment episodic return
-        #self.ep_return += 1
+        #increment penalties return
         self.penalties += penalties
         
         #draw elements on canvas
         self.draw_elements_on_canvas()
         
-        self.reward += reward
+        self.reward += (reward + reward_high)
         
-        return self.canvas, reward, done, []
+        return self.canvas, reward, s_high, reward_high, done
     
     def reset(self, episode):
         self.reward = 0
         self.episode = episode
+        state_high = []
         
         #initialize the location of the drone on the grid
         x = random.randrange(int(self.observation_shape[0] * 0.05), 
@@ -274,7 +296,15 @@ class UAV(Env):
         #draw elements on canvas
         self.draw_elements_on_canvas()
         
-        return self.canvas
+        #check sensor at beginning and get current initial high layer states
+        R_obs,D_obs,R_targ,A_targ_obs = self.drone.checkSensor(self.moving_obs, self.target)
+        if self.drone.checkObsInFov() == True:
+            state_high.append(R_obs)
+            state_high.append(D_obs)
+            state_high.append(R_targ)
+            state_high.append(A_targ_obs)
+        
+        return self.canvas, state_high
     
     def genBoltzmann(self, Q_table, U, iterNum):
         #generate a bolzman random variable using the discrete inverse
@@ -363,6 +393,122 @@ class Drone(Point):
         self.icon_h = 64
         self.icon = cv2.resize(self.icon, (self.icon_h, self.icon_w))
         
+        #sensor properties
+        self.sensor_fov = 3
+        self.obs_in_fov = False
+    
+    def checkSensor(self, moving_obstacle, target):
+        
+        #initialize obstacle region to empty
+        R_obs = None
+        R_targ = None
+        D_obs = None
+        A_targ_obs = None
+        
+        #assume obstacle not in fov
+        self.obs_in_fov = False
+            
+        #check to see if the moving obstacle is within the sensor fov
+        moving_obs_x, moving_obs_y = moving_obstacle.get_position()
+        targ_x, targ_y = target.get_position()
+        self_x, self_y = self.get_position()
+        
+        #calculate distance
+        del_obs_x = (moving_obs_x - self_x)
+        del_obs_y = (moving_obs_y - self_y)
+        d_uo = sqrt( del_obs_x**2 + del_obs_y**2 )
+        
+        #check which region the target is in
+        del_targ_x = (targ_x - self_x)
+        del_targ_y = (targ_y - self_y)
+        #d_ut = sqrt( del_targ_x**2 + del_targ_y**2 )
+        
+        #angle corresponding to the region the target is in
+        alpha_targ = atan2(del_targ_x, del_targ_y) * (180.0/pi)
+        
+        #region check
+        if (alpha_targ > 0 and alpha_targ <= 45):
+            R_targ = 1
+        elif (alpha_targ > 45 and alpha_targ <= 90):
+            R_targ = 2
+        elif (alpha_targ > 90 and alpha_targ <= 135):
+            R_targ = 3
+        elif (alpha_targ > 135 and alpha_targ <= 180):
+            R_targ = 4
+        elif (alpha_targ < 0 and alpha_targ >= -45):
+            R_targ = 5
+        elif (alpha_targ < -45 and alpha_targ >= -90):
+            R_targ = 6
+        elif (alpha_targ < -90 and alpha_targ >= -135):
+            R_targ = 7
+        elif (alpha_targ < -135 and alpha_targ >= -180):
+            R_targ = 8
+        
+        if d_uo < self.sensor_fov:
+            #object is in fov
+            self.obs_in_fov = True
+            
+            #figure out which region the moving object is in
+            #calculate the angle from the Y-axis
+            alpha_obs = atan2(del_obs_x, del_obs_y) * (180.0/pi)
+            
+            #region check
+            if (alpha_obs > 0 and alpha_obs <= 45):
+                R_obs = 1
+            elif (alpha_obs > 45 and alpha_obs <= 90):
+                R_obs = 2
+            elif (alpha_obs > 90 and alpha_obs <= 135):
+                R_obs = 3
+            elif (alpha_obs > 135 and alpha_obs <= 180):
+                R_obs = 4
+            elif (alpha_obs < 0 and alpha_obs >= -45):
+                R_obs = 5
+            elif (alpha_obs < -45 and alpha_obs >= -90):
+                R_obs = 6
+            elif (alpha_obs < -90 and alpha_obs >= -135):
+                R_obs = 7
+            elif (alpha_obs < -135 and alpha_obs >= -180):
+                R_obs = 8
+                
+            #get direction of moving object
+            D_obs = moving_obstacle.move_dir
+            
+            #calculate the angle betwee the target and moving obstacle
+            k = (targ_y - self_y)/(targ_x - self_x);
+            b = self_y - k * self_x
+            
+            d_o_line = abs( moving_obs_x - k * self_y - b)/sqrt(k**2 + b**2)
+            
+            #calculate the angle
+            alpha_o_line = asin( d_o_line / d_uo );
+            self.alpha_o_line = alpha_o_line
+        
+            #check the region alpha_o_line is in
+            if alpha_o_line >= 0 and alpha_o_line < pi/8:
+                A_targ_obs = 1
+            elif alpha_o_line >= pi/8 and alpha_o_line < pi/4:
+                A_targ_obs = 2
+            elif alpha_o_line >= pi/4 and alpha_o_line < 3*pi/8:
+                A_targ_obs = 3
+            elif alpha_o_line >= 3*pi/8 and alpha_o_line < pi/2:
+                A_targ_obs = 4
+            elif alpha_o_line >= pi/2 and alpha_o_line < 5*pi/8:
+                A_targ_obs = 5
+            elif alpha_o_line >= 5*pi/8 and alpha_o_line < 3*pi/4:
+                A_targ_obs = 6
+            elif alpha_o_line >= 3*pi/4 and alpha_o_line < 7*pi/8:
+                A_targ_obs = 7
+            elif alpha_o_line >= 7*pi/8 and alpha_o_line < pi:
+                A_targ_obs = 8
+        
+        return R_obs, D_obs, R_targ, A_targ_obs
+        
+    def checkObsInFov(self):
+        return self.obs_in_fov
+    
+    def getAlpha(self):
+        return self.alpha_o_line
+    
 class Target(Point):
     def __init__(self, name, x_max, x_min, y_max, y_min):
         super(Target, self).__init__(name, x_max, x_min, y_max, y_min)
