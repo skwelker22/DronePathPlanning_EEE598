@@ -30,25 +30,26 @@ class UAV(Env):
         self.reward = 0
         
         """
-        Action space defined as:
-        0: N
-        1: NE
-        2: E
-        3: SE
-        4: S
-        5: SW
-        6: W
-        7: NW
+        Action (low) space defined as:
+        0: N, 1: NE, 2: E, 3: SE
+        4: S, 5: SW, 6: W, 7: NW
         8: Do Nothing
+        
+        Dynamic Action (high) space defined as:
+        0: N, 1: NE, 2: E, 3: W
+        4: NW, 5: Do Nothing        
         """
         self.nActions = 9
+        self.nDynamicActions = 6
         self.nObstacles = 3
         self.action_space = spaces.Discrete(self.nActions,)
+        self.action_space_high = spaces.Discrete(self.nDynamicActions,)
         
         self.observation_shape = (400, 400, 3)
         self.observation_space = spaces.Box(low = np.zeros(self.observation_shape),
                                             high = np.zeros(self.observation_shape), 
                                             dtype = np.float16)
+        
         
         #create canvas for image
         self.canvas = np.ones(self.observation_shape) * 1
@@ -135,14 +136,8 @@ class UAV(Env):
         
         """
         Action space defined as:
-        0: N
-        1: NE
-        2: E
-        3: SE
-        4: S
-        5: SW
-        6: W
-        7: NW
+        0: N, 1: NE, 2: E, 3: SE
+        4: S, 5: SW, 6: W, 7: NW
         8: Do Nothing
         """
         if action == 0:
@@ -178,7 +173,7 @@ class UAV(Env):
             
         #calculate the "static obstacle" reward
         reward = self.alpha_low * (d_s_minus - d_s) - self.beta * inverseObsSum
-            
+        
         #check to see if target and drone have collided, if so, fin
         if self.has_collided(self.drone, self.target):
             done = True
@@ -188,9 +183,27 @@ class UAV(Env):
         for obj in self.obs:
             if self.has_collided(self.drone, obj):
                 self.obj_collided = True
-                reward = reward - 1e5
+                #reward = reward - 1e5
                 break
-            
+        
+        #move moving obstacle (just move up and down for simplicity)
+        #get current position
+        curr_obs_x, _ = self.moving_obs.get_position()
+        if curr_obs_x < int(self.observation_shape[0] * 0.40):
+            self.moving_obs.set_move_dir(0)
+        elif curr_obs_x > int(self.observation_shape[0] * 0.85):
+            self.moving_obs.set_move_dir(1)
+        
+        if self.moving_obs.move_dir == 0:
+            self.moving_obs.move(5, 0)
+        elif self.moving_obs.move_dir == 1:
+            self.moving_obs.move(-5, 0)
+        
+        #check collisions with moving obstacle
+        if self.has_collided(self.drone, self.moving_obs):
+            self.obj_collided = True
+            #reward = reward - 1e5
+        
         #increment episodic return
         #self.ep_return += 1
         self.penalties += penalties
@@ -241,10 +254,19 @@ class UAV(Env):
             obj.set_position(x_obs[pos_cnt], y_obs[pos_cnt])
             pos_cnt += 1
         
+        #initialize moving obstacles
+        x_move_obs = int(self.observation_shape[0] * 0.45)
+        y_move_obs = int(self.observation_shape[1] * 0.50)
+        
+        #set moving obstacle position
+        self.moving_obs = MovingObstacle("moving_obstacle", self.x_max, self.x_min, self.y_max, self.y_min)
+        self.moving_obs.set_position(x_move_obs, y_move_obs)
+        
         #init elements
         self.elements = [self.drone, 
                          self.target, 
-                         self.obs[0], self.obs[1], self.obs[2]]
+                         self.obs[0], self.obs[1], self.obs[2], 
+                         self.moving_obs]
         
         #init canvas
         self.canvas = np.ones(self.observation_shape) * 1
@@ -273,15 +295,13 @@ class UAV(Env):
         for a in range(self.nActions):
             
             #numerator
-            #exp_num = exp(float(Q_table[a])/T_k)
-            exp_num = float(Q_table[a])/T_k
+            exp_num = exp(-float(Q_table[a])/T_k)
             
             #reset cumSum
             exp_den = 0.0
             
             for i in range(self.nActions):
-                    #exp_den += exp(float(Q_table[i])/T_k)
-                    exp_den += float(Q_table[i])/T_k
+                    exp_den += exp(-float(Q_table[i])/T_k)
                     
             #append probability
             probs.append(exp_num/( exp_den + eps ))
@@ -357,4 +377,18 @@ class Obstacle(Point):
         self.icon = cv2.imread("obstacle.png") / 255.0
         self.icon_w = 32
         self.icon_h = 32
-        self.icon = cv2.resize(self.icon, (self.icon_h, self.icon_w))        
+        self.icon = cv2.resize(self.icon, (self.icon_h, self.icon_w)) 
+        
+class MovingObstacle(Point):
+    def __init__(self, name, x_max, x_min, y_max, y_min):
+        super(MovingObstacle, self).__init__(name, x_max, x_min, y_max, y_min)
+        self.icon = cv2.imread("moving_obstacle.png") / 255.0
+        self.icon_w = 32
+        self.icon_h = 32
+        self.icon = cv2.resize(self.icon, (self.icon_h, self.icon_w))
+        self.move_dir = 0
+    
+    def set_move_dir(self, move_dir):
+        #legend: 0 = east, 1 = west (for simplicity)
+        self.move_dir = move_dir
+        

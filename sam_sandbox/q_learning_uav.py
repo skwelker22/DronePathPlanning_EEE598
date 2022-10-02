@@ -5,13 +5,6 @@ Created on Sat Sep 17 20:42:15 2022
 @author: skwel
 """
 
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Sep 11 07:57:56 2022
-
-@author: skwel
-"""
-
 from UAV import UAV
 from IPython import display
 #from time import sleep
@@ -20,13 +13,13 @@ import random
 import matplotlib.pyplot as plt
 
 # Hyper parameters
-alpha = 0.3 #learning rate
+alpha = 0.2 #learning rate
 alpha_low = 0.1
 beta = 5
-gamma = 0.6 #discount factor
-epsilon = 0.07 #for epsilon-greedy
-lamb = 0.9 #discount factor
-T0 = 1e3 #initial value of temp param
+gamma = 0.9 #discount factor
+epsilon = 0.1 #for epsilon-greedy
+lamb = 0.2 #discount factor
+T0 = 100 #initial value of temp param
 max_iter = 500
 nEpisodes = int(1e3)
 
@@ -57,7 +50,7 @@ for i in range(1, nEpisodes):
             action = env.action_space.sample() #explore action space
         else:
             #action = env.genBoltzmann(q_table[state_x, state_y], U, i)
-            action = np.argmax(q_table[state_x, state_y]) #eploit learned values
+            action = np.argmax(q_table[state_x, state_y])
 
         #state transition
         state_dot_grid, reward, done, _ = env.step(action)
