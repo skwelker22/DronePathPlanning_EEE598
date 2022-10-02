@@ -15,8 +15,8 @@ import matplotlib.pyplot as plt
 # Hyper parameters
 alpha = 0.2 #learning rate
 alpha_low = 0.1
-beta = 5
-gamma = 0.9 #discount factor
+beta = 10
+gamma = 0.4 #discount factor
 epsilon = 0.1 #for epsilon-greedy
 lamb = 0.2 #discount factor
 T0 = 100 #initial value of temp param
@@ -44,9 +44,9 @@ high_tuple = (8,2,8,8,9)
 #n_actions_high = env.action_space_high.n
 q_table_high = np.zeros(high_tuple)
 
-all_epochs, all_penalties = [list() for i in range(2)]
+all_epochs, all_penalties, final_distance = [list() for i in range(3)]
 
-for i in range(1, nEpisodes):
+for i in range(1, nEpisodes+1):
     #reset and render
     state_grid, state_high = env.reset(i)
     state_x, state_y = env.drone.get_position()    
@@ -65,7 +65,7 @@ for i in range(1, nEpisodes):
         #check if the moving obstacle is in the sensor FOV
         elif env.drone.checkObsInFov() == True:
             action = np.argmax(q_table[state_x, state_y] + \
-                               q_table_high[state_high(0), state_high(1), state_high(2), state_high(3)])
+                               q_table_high[state_high[0], state_high[1], state_high[2], state_high[3]])
         else:
             #action = env.genBoltzmann(q_table[state_x, state_y], U, i)
             action = np.argmax(q_table[state_x, state_y])
@@ -88,12 +88,12 @@ for i in range(1, nEpisodes):
         
         #update higher layer q-network
         if env.drone.checkObsInFov() == True:
-            next_max_high = np.max(q_table_high[state_dot_high(0), state_dot_high(1), \
-                                                state_dot_high(2), state_dot_high(3)])
+            next_max_high = np.max(q_table_high[state_dot_high[0], state_dot_high[1], \
+                                                state_dot_high[2], state_dot_high[3]])
             #equation 16
             new_value_high = reward_high + gamma * next_max_high
-            q_table_high[state_dot_high(0), state_dot_high(1), \
-                         state_dot_high(2), state_dot_high(3), action] = new_value_high
+            q_table_high[state_dot_high[0], state_dot_high[1], \
+                         state_dot_high[2], state_dot_high[3], action] = new_value_high
         
         epochs += 1
         
@@ -113,6 +113,7 @@ for i in range(1, nEpisodes):
     #save off epoch array
     all_epochs.append(epochs)
     all_penalties.append(penalties)
+    final_distance.append(env.final_distance)
         
 
 #q-training finished

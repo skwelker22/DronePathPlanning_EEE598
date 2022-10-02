@@ -28,7 +28,7 @@ class UAV(Env):
         self.b1 = b1
         self.b2 = b2
         self.b3 = b3
-        
+        self.final_distance = None
         """
         Action (low) space defined as:
         0: N, 1: NE, 2: E, 3: SE
@@ -162,6 +162,7 @@ class UAV(Env):
         #calculate the distance after action
         x_drone_dot, y_drone_dot = self.drone.get_position()
         d_s = self.calcDistance(x_drone_dot, x_targ, y_drone_dot, y_targ)
+        self.final_distance = d_s
         
         #calculate the distance to each obstacle and sum inverses
         inverseObsSum = 0
@@ -181,6 +182,7 @@ class UAV(Env):
         self.obj_collided = False
         for obj in self.obs:
             if self.has_collided(self.drone, obj):
+                reward = reward - 50
                 self.obj_collided = True
                 break
         
@@ -224,6 +226,7 @@ class UAV(Env):
         
         #check collisions with moving obstacle
         if self.has_collided(self.drone, self.moving_obs):
+            reward = reward - 50
             self.obj_collided = True
         
         #increment penalties return
@@ -256,6 +259,9 @@ class UAV(Env):
         
         self.target = Target("target", self.x_max, self.x_min, self.y_max, self.y_min)
         self.target.set_position(x_targ, y_targ)
+        
+        #initialize final distance
+        self.final_distance = self.calcDistance(x, x_targ, y, y_targ)
         
         ##init obstacles
         x_obs, y_obs = [np.zeros(self.nObstacles, dtype = int) for i in range(2)]
@@ -389,12 +395,12 @@ class Drone(Point):
     def __init__(self, name, x_max, x_min, y_max, y_min):
         super(Drone, self).__init__(name, x_max, x_min, y_max, y_min)
         self.icon = cv2.imread("drone_basic.png") / 255.0
-        self.icon_w = 64
-        self.icon_h = 64
+        self.icon_w = 32
+        self.icon_h = 32
         self.icon = cv2.resize(self.icon, (self.icon_h, self.icon_w))
         
         #sensor properties
-        self.sensor_fov = 3
+        self.sensor_fov = 32/2+32/2
         self.obs_in_fov = False
     
     def checkSensor(self, moving_obstacle, target):
