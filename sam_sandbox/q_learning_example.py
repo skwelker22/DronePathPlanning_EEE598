@@ -10,7 +10,7 @@ import numpy as np
 from time import sleep
 import random
 import matplotlib.pyplot as plt
-from IPython.display import clear_output
+# from IPython.display import clear_output
 
 #setup the environment (taxi)
 env = gym.make("Taxi-v3").env
@@ -68,7 +68,7 @@ for i in range(1, nEpisodes):
         
         
     if i % 100 == 0:
-        clear_output(wait=True)
+        # clear_output(wait=True)
         print(f"Episode: {i}")
     
     #save off epoch array
