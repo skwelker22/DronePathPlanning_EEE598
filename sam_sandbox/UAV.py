@@ -80,9 +80,15 @@ class UAV(Env):
             
         #text = 'Rewards: {}, Penalties: {}, Episode #: {}'.format(self.ep_return, self.penalties, self.episode)
         text = 'Rewards: {:.1f}, Ep: {:.0f}'.format(self.reward, self.episode)
+        info = 'alpha_low: {:.2f}, beta: {:.2f}'.format(self.alpha_low, self.beta)
         font = cv2.FONT_HERSHEY_SIMPLEX
         
         self.canvas = cv2.putText(self.canvas, text, (10,20), 
+                                  font, 0.8,
+                                  (0,0,0), 1, 
+                                  cv2.LINE_AA)
+
+        self.canvas = cv2.putText(self.canvas, info, (30,50), 
                                   font, 0.8,
                                   (0,0,0), 1, 
                                   cv2.LINE_AA)

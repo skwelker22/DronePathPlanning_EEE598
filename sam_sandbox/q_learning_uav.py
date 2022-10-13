@@ -3,6 +3,7 @@
 Created on Sat Sep 17 20:42:15 2022
 
 @author: skwel
+@modified by Jian Meng 
 """
 
 from UAV import UAV
@@ -15,13 +16,13 @@ import matplotlib.pyplot as plt
 # Hyper parameters
 alpha = 0.2 #learning rate
 alpha_low = 0.1
-beta = 10
+beta = 0.9
 gamma = 0.4 #discount factor
 epsilon = 0.1 #for epsilon-greedy
 lamb = 0.2 #discount factor
 T0 = 100 #initial value of temp param
-max_iter = 500
-nEpisodes = int(1e3)
+max_iter = 1000
+nEpisodes = int(1e2)
 
 #beta terms for higher layer reward
 b1 = 0.6
@@ -44,7 +45,7 @@ high_tuple = (8,2,8,8,9)
 #n_actions_high = env.action_space_high.n
 q_table_high = np.zeros(high_tuple)
 
-all_epochs, all_penalties, final_distance = [list() for i in range(3)]
+all_epochs, all_penalties, final_distance, all_reward = [list() for i in range(4)]
 
 for i in range(1, nEpisodes+1):
     #reset and render
@@ -67,7 +68,7 @@ for i in range(1, nEpisodes+1):
             action = np.argmax(q_table[state_x, state_y] + \
                                q_table_high[state_high[0], state_high[1], state_high[2], state_high[3]])
         else:
-            #action = env.genBoltzmann(q_table[state_x, state_y], U, i)
+            # action = env.genBoltzmann(q_table[state_x, state_y], U, i)
             action = np.argmax(q_table[state_x, state_y])
         
         #state transition
@@ -112,14 +113,18 @@ for i in range(1, nEpisodes+1):
     #save off epoch array
     all_epochs.append(epochs)
     all_penalties.append(penalties)
+    all_reward.append(reward)
     final_distance.append(env.final_distance)
-        
+
 
 #q-training finished
 print("Training finished.\n")
+all_penalties = np.array(all_penalties)
+spars = len(all_penalties[all_penalties==0])/len(all_penalties)
+print("Total number of zero penalities: {} after {} episode, spars={}".format(len(all_penalties[all_penalties==0]), nEpisodes, spars))
 
 #create plots
-fig, ax = plt.subplots(2)
+fig, ax = plt.subplots(3)
 ax[0].plot(all_epochs)
 ax[0].set_ylabel('# Epochs')
 ax[0].set_xlabel("Episode #")
@@ -127,6 +132,12 @@ ax[0].set_xlabel("Episode #")
 ax[1].plot(all_penalties)
 ax[1].set_ylabel("# Penalties")
 ax[1].set_xlabel("Episode #")
+
+ax[2].plot(all_reward)
+ax[2].set_ylabel("Total Reward")
+ax[2].set_xlabel("Episode #")
+
+fig.savefig(f"./results_alpha{alpha}_alpha_low{alpha_low}_beta{beta}.png", dpi=300, bbox_inches='tight', pad_inches=0.1)
 
 
 
