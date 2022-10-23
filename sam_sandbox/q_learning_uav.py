@@ -14,7 +14,7 @@ import random
 import matplotlib.pyplot as plt
 
 # Hyper parameters
-alpha = 0.2 #learning rate
+alpha = 0.2 # learning rate
 alpha_low = 0.1
 beta = 0.9
 gamma = 0.4 # discount factor
