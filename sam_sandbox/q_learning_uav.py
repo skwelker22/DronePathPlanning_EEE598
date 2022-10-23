@@ -17,10 +17,10 @@ import matplotlib.pyplot as plt
 alpha = 0.2 #learning rate
 alpha_low = 0.1
 beta = 0.9
-gamma = 0.4 #discount factor
-epsilon = 0.1 #for epsilon-greedy
-lamb = 0.2 #discount factor
-T0 = 100 #initial value of temp param
+gamma = 0.4 # discount factor
+epsilon = 0.05 #for epsilon-greedy
+lamb = 0.9 #discount factor
+T0 = 100.0 #initial value of temp param
 max_iter = 1000
 nEpisodes = int(1e2)
 
@@ -67,9 +67,9 @@ for i in range(1, nEpisodes+1):
         elif env.drone.checkObsInFov() == True:
             action = np.argmax(q_table[state_x, state_y] + \
                                q_table_high[state_high[0], state_high[1], state_high[2], state_high[3]])
-        else:
-            # action = env.genBoltzmann(q_table[state_x, state_y], U, i)
-            action = np.argmax(q_table[state_x, state_y])
+        else: 
+            # action = np.argmax(q_table[state_x, state_y])
+            action = env.genBoltzmann(q_table[state_x, state_y], U, i)
         
         #state transition
         state_dot_grid, reward, state_dot_high, reward_high, done = env.step(action)

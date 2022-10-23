@@ -79,7 +79,7 @@ class UAV(Env):
             self.canvas[y : y + elem_shape[1], x : x + elem_shape[0]] = elem.icon
             
         #text = 'Rewards: {}, Penalties: {}, Episode #: {}'.format(self.ep_return, self.penalties, self.episode)
-        text = 'Rewards: {:.1f}, Ep: {:.0f}'.format(self.reward, self.episode)
+        text = 'Rewards: {:.1f}, Ep: {:.0f}, Pen={}'.format(self.reward, self.episode, self.penalties)
         info = 'alpha_low: {:.2f}, beta: {:.2f}'.format(self.alpha_low, self.beta)
         font = cv2.FONT_HERSHEY_SIMPLEX
         
@@ -337,26 +337,26 @@ class UAV(Env):
         for a in range(self.nActions):
             
             #numerator
-            exp_num = exp(-float(Q_table[a])/T_k)
+            exp_num = exp(float(Q_table[a])/T_k)
             
             #reset cumSum
             exp_den = 0.0
             
             for i in range(self.nActions):
-                    exp_den += exp(-float(Q_table[i])/T_k)
+                exp_den += exp(float(Q_table[i])/T_k)
                     
             #append probability
-            probs.append(exp_num/( exp_den + eps ))
-            
-        #apply discrete inverse transform technique to generate action
-        #generate CDF
-        for a in range(self.nActions):
-            q_i = sum(probs[0:a+1])
-            #check if uniform random input is less than cumulated probability
-            if U < q_i:
-                return a
-            else:
-                return self.nActions - 1
+            probs.append(exp_num / ( exp_den + eps))
+        return np.argmax(probs)  
+        # #apply discrete inverse transform technique to generate action
+        # #generate CDF
+        # for a in range(self.nActions):
+        #     q_i = sum(probs[0:a+1])
+        #     #check if uniform random input is less than cumulated probability
+        #     if U < q_i:
+        #         return a
+        #     else:
+        #         return self.nActions - 1
      
     def calcDistance(self, x1, x2, y1, y2):
         return sqrt( (x1 - x2)**2 + (y1 - y2)**2 )
