@@ -8,7 +8,7 @@ import torch.nn as nn
 import numpy as np
 import random
 import matplotlib.pyplot as plt
-from utils import ReplayMemory, Transition
+from UAV import UAV
 
 parser = argparse.ArgumentParser(description='DQN Learning')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')

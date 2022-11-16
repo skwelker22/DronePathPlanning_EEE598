@@ -5,13 +5,11 @@ Created on Sat Sep 17 20:42:15 2022
 @author: skwel
 @modified by Jian Meng 
 """
-
-from UAV import UAV
-# from IPython import display
-#from time import sleep
-import numpy as np
 import random
+from UAV import UAV
+import numpy as np
 import matplotlib.pyplot as plt
+from models import Dqn
 
 # Hyper parameters
 alpha = 0.2 # learning rate
@@ -28,6 +26,8 @@ nEpisodes = int(1e2)
 b1 = 0.6
 b2 = 0.3
 b3 = 0.1
+
+
 
 #define and reset environment
 env = UAV(lamb, T0, alpha_low, beta, b1, b2, b3)
@@ -46,6 +46,9 @@ high_tuple = (8,2,8,8,9)
 q_table_high = np.zeros(high_tuple)
 
 all_epochs, all_penalties, final_distance, all_reward = [list() for i in range(4)]
+dqn = Dqn(input_size=6, nb_action=9, gamma=0.5)
+dqn_static = Dqn(input_size=2, nb_action=9, gamma=0.5)
+prev_reward = 0
 
 for i in range(1, nEpisodes+1):
     #reset and render
@@ -59,20 +62,15 @@ for i in range(1, nEpisodes+1):
     while not done:
         
         #epsilon greedy strategy for action decision
-        U = random.uniform(0,1)
-        if U < epsilon:
-            #explore action space
-            action = env.action_space.sample() 
-        #check if the moving obstacle is in the sensor FOV
-        elif env.drone.checkObsInFov() == True:
-            action = np.argmax(q_table[state_x, state_y] + \
-                               q_table_high[state_high[0], state_high[1], state_high[2], state_high[3]])
+        if env.drone.checkObsInFov() == True:
+            vec = [state_x, state_y, state_high[0], state_high[1], state_high[2], state_high[3]]
+            action = dqn.update(prev_reward, vec)
         else: 
-            # action = np.argmax(q_table[state_x, state_y])
-            action = env.genBoltzmann(q_table[state_x, state_y], U, i)
-        import pdb;pdb.set_trace()
+            action = dqn_static.update(prev_reward, [state_x, state_y])
+
         #state transition
         state_dot_grid, reward, state_dot_high, reward_high, done = env.step(action)
+        prev_reward = reward + reward_high
         
         #get new states after action has taken place
         state_dot_x, state_dot_y = env.drone.get_position()
@@ -80,21 +78,8 @@ for i in range(1, nEpisodes+1):
         old_value = q_table[state_x, state_y, action]
         next_max = np.max(q_table[state_dot_x, state_dot_y])
         
-        #q update
-        new_value = (1-alpha) * old_value + alpha * (reward + gamma * next_max)
-        q_table[state_x, state_y, action] = new_value
-        
         #pass new states into old
         state_x, state_y = state_dot_x, state_dot_y
-        
-        #update higher layer q-network
-        if env.drone.checkObsInFov() == True:
-            next_max_high = np.max(q_table_high[state_dot_high[0], state_dot_high[1], \
-                                                state_dot_high[2], state_dot_high[3]])
-            #equation 16
-            new_value_high = reward_high + gamma * next_max_high
-            q_table_high[state_dot_high[0], state_dot_high[1], \
-                         state_dot_high[2], state_dot_high[3], action] = new_value_high
         
         epochs += 1
         
@@ -115,7 +100,6 @@ for i in range(1, nEpisodes+1):
     all_penalties.append(penalties)
     all_reward.append(reward)
     final_distance.append(env.final_distance)
-    print(env.reward)
 
 
 #q-training finished
