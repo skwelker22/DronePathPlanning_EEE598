@@ -24,8 +24,15 @@ from scipy import signal
 from actor_critic_policy import get_actor, get_critic, policy
 from pdb import set_trace
 
+#hack to fix plotting when tf is running
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
+
+#set print options
+np.set_printoptions(suppress = True)
+
 # max iterations per episode
-max_iter = 300
+max_iter = 400
 total_episodes = 500
 
 #define number of states based on feature s_t
@@ -43,8 +50,8 @@ action_bounds = [angMin, angMax]
 #define and reset environment
 env = UAV(n_states, action_bounds, dT)
 
-#std_dev = 0.2
-std_dev = 0.0
+#std_dev = math.pi/3
+std_dev = 0.3
 ou_noise = QUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
 
 #create actor/critic models
@@ -106,10 +113,15 @@ for ep in range(total_episodes):
         #draw action according to the policy (using the actor network)
         action = policy(tf_prev_state, ou_noise, actor_model, action_bounds)
         
+        #debug
+        #print("Prev State = " + str(prev_state))
+        
         # Recieve state and reward from environment.
         state, reward, done = env.step(action)
         
         #record the current MDP tuple into the replay memory buffer
+        #print("Prev State (after step) = " + str(prev_state))
+        #print("New State = " + str(state))
         buffer.record((prev_state, action, reward, state))
         episodic_reward += reward
         
@@ -130,7 +142,7 @@ for ep in range(total_episodes):
             break
         
         #overwrite previous state with new state
-        prev_state = state
+        prev_state[:] = state[:]
         
         #render environment for visualization
         env.render()

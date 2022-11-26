@@ -21,6 +21,7 @@ class QUActionNoise:
 
     def __call__(self):
         # Formula taken from https://www.wikipedia.org/wiki/Ornstein-Uhlenbeck_process.
+        self.dt = 1
         x = (
             self.x_prev
             + self.theta * (self.mean - self.x_prev) * self.dt

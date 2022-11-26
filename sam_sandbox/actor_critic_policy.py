@@ -8,6 +8,8 @@ Created on Sun Nov 20 10:50:04 2022
 from tensorflow.keras import layers
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
+import math
 
 def get_actor(num_states, action_upper_bound):
     # Initialize weights between -3e-3 and 3-e3
@@ -48,12 +50,24 @@ def get_critic(num_states, num_actions):
 def policy(state, noise_object, actor_model, action_bounds):
     sampled_actions = tf.squeeze(actor_model(state))
     noise = noise_object()
+    
+    """
+    print("Sampled Action w/o noise [degrees] = " + str(math.degrees(sampled_actions.numpy())))
+    print("Sampled Action w/o noise [rads] = " + str((sampled_actions.numpy())))
+    print("Noise value = " + str(noise))
+    """
     # Adding noise to action
     sampled_actions = sampled_actions.numpy() + noise
+    
+    #debug
+    #print('Sampled Action from Actor Network = ' + str(math.degrees(sampled_actions[0])))
 
     # We make sure action is within bounds
     # action_bounds[0] = lower_bound
     # action_bounds[1] = upper_bound
     legal_action = np.clip(sampled_actions, action_bounds[0], action_bounds[1])
+    
+    #debug
+    #print("Clipped Action from Actor Network = " + str(math.degrees(legal_action[0])))
 
     return [np.squeeze(legal_action)]

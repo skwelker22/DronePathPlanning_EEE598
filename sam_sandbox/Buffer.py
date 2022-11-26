@@ -7,6 +7,7 @@ Created on Sun Nov 20 10:43:04 2022
 
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 #buffer class for replay memory
 class Buffer:

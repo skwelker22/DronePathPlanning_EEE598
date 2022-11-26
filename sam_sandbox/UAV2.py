@@ -36,6 +36,7 @@ class UAV(Env):
         self.final_distance = None
         self.distThreshold = 64 #starts givng + 10 reward when uav is within 64 pixels
         self.state_feature = np.zeros((num_states,))
+        self.init_feature = np.zeros((num_states,))
         
         """
         Action space defined as: yaw angle [-pi, pi]
@@ -118,6 +119,35 @@ class UAV(Env):
         
         return False
     
+    def has_collided_with_boundry(self, drone):
+        x_col = False
+        y_col = False
+        
+        #get drone position
+        drone_x, drone_y = drone.get_position()
+ 
+        #get grid world shape
+        grid_x = self.observation_shape[0]
+        
+        #check to see if the drone position is touching the boundry
+        #define conditions
+        left_edge = (drone_x - drone.icon_w/2) <= 0
+        right_edge = (drone_x + drone.icon_w/2) >= grid_x
+        bottom_edge = (drone_y + drone.icon_h/2) >= self.y_max
+        top_edge = (drone_y - drone.icon_h/2) <= self.y_min
+        
+        if left_edge or right_edge:
+            x_col = True
+            
+        if top_edge or bottom_edge:
+            y_col = True
+            
+        if x_col or y_col:
+            return True
+        
+        return False
+ 
+    
     def reset(self, episode):
         self.cum_reward = 0
         self.episode = episode
@@ -133,10 +163,10 @@ class UAV(Env):
         #initialize drone states
         self.drone.state[0] = x
         self.drone.state[1] = y
-        self.drone.state[2] = 1   #1 pixel / second
-        self.drone.state[3] = 1   #1 pixel / second
-        self.drone.state[4] = 0.5 #0.5 pixel / second/ second
-        self.drone.state[5] = 0   
+        self.drone.state[2] = 1.0  #1 pixel / second
+        self.drone.state[3] = 0.0  #1 pixel / second
+        self.drone.state[4] = 0.002  #0.5 pixel / second/ second
+        self.drone.state[5] = 0.0   
         
         #initialize the target location
         x_targ = int(self.observation_shape[0] * 0.90)
@@ -149,12 +179,12 @@ class UAV(Env):
         self.final_distance = self.calcDistance(x, x_targ, y, y_targ)
         
         #calcualte initial state feature
-        self.state_feature[0] = self.drone.state[0] #initial uav position (x)
-        self.state_feature[1] = self.drone.state[1] #initial uav position (y)
-        self.state_feature[2] = self.drone.state[0] - x_targ #initial relative position (x)
-        self.state_feature[3] = self.drone.state[1] - y_targ #initial relative position (y)
-        self.state_feature[4] = self.drone.state[2] # initial velocity (x)
-        self.state_feature[5] = self.drone.state[3] # initial velocity (y)
+        self.init_feature[0] = self.drone.state[0] #initial uav position (x)
+        self.init_feature[1] = self.drone.state[1] #initial uav position (y)
+        self.init_feature[2] = np.abs(self.drone.state[0] - x_targ) #initial relative position (x)
+        self.init_feature[3] = np.abs(self.drone.state[1] - y_targ) #initial relative position (y)
+        self.init_feature[4] = self.drone.state[2] # initial velocity (x)
+        self.init_feature[5] = self.drone.state[3] # initial velocity (y)
         
         ##init obstacles
         x_obs, y_obs = [np.zeros(self.nObstacles, dtype = int) for i in range(2)]
@@ -187,14 +217,13 @@ class UAV(Env):
         #draw elements on canvas
         self.draw_elements_on_canvas()
         
-        return self.state_feature
+        return self.init_feature
 
     def step(self, action):
         
-        #reset done, current rewards and penalties
+        #reset done and current rewards
         done = False
         reward_t = 0
-        penalties = 0
         
         #check if the requested action is within bounds
         assert action[0] <= self.angMax and action[0] >= self.angMin, "Invalid Action"
@@ -204,7 +233,7 @@ class UAV(Env):
         Action space defined as:
         yaw angle in the interval [-pi:pi/15:pi]
         """
-        print("Action in [degrees] = " + str(math.degrees(action[0])))
+        #print("Action in [degrees] = " + str(math.degrees(action[0])))
         self.drone.move(action[0])
         
         #create new state feature vector
@@ -215,14 +244,16 @@ class UAV(Env):
         #set state features
         self.state_feature[0] = x_drone_dot
         self.state_feature[1] = y_drone_dot
-        self.state_feature[2] = x_drone_dot - x_targ
-        self.state_feature[3] = y_drone_dot - y_targ
+        self.state_feature[2] = abs(x_drone_dot - x_targ)
+        self.state_feature[3] = abs(y_drone_dot - y_targ)
         self.state_feature[4] = vx_drone_dot
         self.state_feature[5] = vy_drone_dot
         
+        """
         print("state feature px = " + str(self.state_feature[0]))
         print("state feature del-px = " + str(self.state_feature[2]))
         print("state feature vx = " + str(self.state_feature[4]))
+        """
         
         #calculate rewards
         #calculate the distance for Rd
@@ -245,6 +276,11 @@ class UAV(Env):
                 reward_t += -2 #fixed -2 when uav collides with obstacle
                 self.obj_collided = True
                 break
+        
+        #check for collisions with the boundry of the grid space
+        if self.has_collided_with_boundry(self.drone):
+            reward_t += -20
+            self.obj_collided = True
         
         #increment cummulative reward
         self.cum_reward += reward_t
@@ -315,7 +351,7 @@ class Drone(Point):
     def move(self, yaw):
         
         #force command to test steering
-        #yaw = -0.0698
+        #yaw = 10*math.pi/180
         
         #calculate the center of the image
         (h, w) = self.icon.shape[:2]
@@ -329,17 +365,19 @@ class Drone(Point):
         
         #create C from scratch
         C = np.array([[cos(yaw), -sin(yaw)],[sin(yaw), cos(yaw)]])
-        a_cmd = np.dot(C, self.state[-2:])
+        cmd_power = 0.1
+        a_cmd = np.dot(C, cmd_power * np.array([1,0]))
         
-        #add in command x_dot = Ax + Bu
-        #negate y component because opposite in grid
-        #a_cmd[1] = -a_cmd[1]
-        self.state[4:] = a_cmd
+        #add in command x_dot = Ax + Bus
+        #negate the y component because y axis is oriented opposite of
+        #conventional notation
+        a_cmd[1] = -a_cmd[1]
+        self.state[4:] += a_cmd
         
         #propogate forward using constant accleration model
         #position
         self.state_dot[0] = self.state[0] + self.state[2] * self.dT + 0.5 * self.dT * self.dT * self.state[4]
-        self.state_dot[1] = self.state[1] - self.state[3] * self.dT + 0.5 * self.dT * self.dT * self.state[5]
+        self.state_dot[1] = self.state[1] + self.state[3] * self.dT + 0.5 * self.dT * self.dT * self.state[5]
         
         #velocity
         self.state_dot[2] = self.state[2] + self.dT * self.state[4]
@@ -356,9 +394,15 @@ class Drone(Point):
         #overwrite old states with propogated
         self.state = self.state_dot
         
-        print("yaw [degrees] = " + str(math.degrees(yaw)))
+        """
+        print("yaw cmd [degrees] = " + str(math.degrees(yaw)))
         print("x = " + str(self.state_dot[0]))
         print("y = " + str(self.state_dot[1]))
+        print("vx = " + str(self.state_dot[2]))
+        print("vy = " + str(self.state_dot[3]))
+        print("ax = " + str(self.state_dot[4]))
+        print("ay = " + str(self.state_dot[5]))
+        """
         
         #set x/y for drawing on canvas
         self.x = self.state_dot[0].astype(np.int64)
