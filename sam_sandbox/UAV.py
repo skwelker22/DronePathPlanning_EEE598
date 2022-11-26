@@ -29,6 +29,7 @@ class UAV(Env):
         self.b2 = b2
         self.b3 = b3
         self.final_distance = None
+        self.Q = 0
         """
         Action (low) space defined as:
         0: N, 1: NE, 2: E, 3: SE
@@ -67,7 +68,9 @@ class UAV(Env):
         
         #init episode #
         self.episode = 0
-        
+    
+    def setQ(self, Q):
+        self.Q = Q
         
     def draw_elements_on_canvas(self):
         
@@ -79,7 +82,7 @@ class UAV(Env):
             self.canvas[y : y + elem_shape[1], x : x + elem_shape[0]] = elem.icon
             
         #text = 'Rewards: {}, Penalties: {}, Episode #: {}'.format(self.ep_return, self.penalties, self.episode)
-        text = 'Rewards: {:.1f}, Ep: {:.0f}'.format(self.reward, self.episode)
+        text = 'R: {:.1f}, Ep: {:.0f}, Q: {:.1f}'.format(self.reward, self.episode, self.Q)
         font = cv2.FONT_HERSHEY_SIMPLEX
         
         self.canvas = cv2.putText(self.canvas, text, (10,20), 
@@ -191,9 +194,11 @@ class UAV(Env):
         curr_move_obs_x, curr_move_obs_y = self.moving_obs.get_position()
         d_uo = self.calcDistance(x_drone_dot, curr_move_obs_x, y_drone_dot, curr_move_obs_y)
         
-        if curr_move_obs_x < int(self.observation_shape[0] * 0.40):
+        #if curr_move_obs_x < int(self.observation_shape[0] * 0.40):
+        if curr_move_obs_x < int(self.observation_shape[0] * 0.10):
             self.moving_obs.set_move_dir(0)
-        elif curr_move_obs_x > int(self.observation_shape[0] * 0.85):
+        #elif curr_move_obs_x > int(self.observation_shape[0] * 0.80):
+        elif curr_move_obs_x > int(self.observation_shape[0] * 0.3):
             self.moving_obs.set_move_dir(1)
         
         if self.moving_obs.move_dir == 0:
@@ -226,7 +231,7 @@ class UAV(Env):
         
         #check collisions with moving obstacle
         if self.has_collided(self.drone, self.moving_obs):
-            reward = reward - 50
+            #reward = reward - 50
             self.obj_collided = True
         
         #increment penalties return
@@ -242,7 +247,7 @@ class UAV(Env):
     def reset(self, episode):
         self.reward = 0
         self.episode = episode
-        state_high = []
+        state_high = np.zeros((4,1))
         
         #initialize the location of the drone on the grid
         x = random.randrange(int(self.observation_shape[0] * 0.05), 
@@ -283,8 +288,11 @@ class UAV(Env):
             pos_cnt += 1
         
         #initialize moving obstacles
-        x_move_obs = int(self.observation_shape[0] * 0.45)
-        y_move_obs = int(self.observation_shape[1] * 0.50)
+        #x_move_obs = int(self.observation_shape[0] * 0.75)
+        #y_move_obs = int(self.observation_shape[1] * 0.50)
+        x_move_obs = int(self.observation_shape[0] * 0.10)
+        y_move_obs = int(self.observation_shape[1] * 0.90)
+        
         
         #set moving obstacle position
         self.moving_obs = MovingObstacle("moving_obstacle", self.x_max, self.x_min, self.y_max, self.y_min)
@@ -305,10 +313,10 @@ class UAV(Env):
         #check sensor at beginning and get current initial high layer states
         R_obs,D_obs,R_targ,A_targ_obs = self.drone.checkSensor(self.moving_obs, self.target)
         if self.drone.checkObsInFov() == True:
-            state_high.append(R_obs)
-            state_high.append(D_obs)
-            state_high.append(R_targ)
-            state_high.append(A_targ_obs)
+            state_high[0] = R_obs
+            state_high[1] = D_obs
+            state_high[2] = R_targ
+            state_high[3] = A_targ_obs
         
         return self.canvas, state_high
     
@@ -400,7 +408,9 @@ class Drone(Point):
         self.icon = cv2.resize(self.icon, (self.icon_h, self.icon_w))
         
         #sensor properties
-        self.sensor_fov = 32/2+32/2
+        #half drone img dimension + half obj image dimension + 29 pixels
+        #as quoted in the paper
+        self.sensor_fov = 32/2+32/2 + 29
         self.obs_in_fov = False
     
     def checkSensor(self, moving_obstacle, target):
@@ -433,22 +443,22 @@ class Drone(Point):
         alpha_targ = atan2(del_targ_x, del_targ_y) * (180.0/pi)
         
         #region check
-        if (alpha_targ > 0 and alpha_targ <= 45):
-            R_targ = 1
+        if (alpha_targ >= 0 and alpha_targ <= 45):
+            R_targ = 0
         elif (alpha_targ > 45 and alpha_targ <= 90):
-            R_targ = 2
+            R_targ = 1
         elif (alpha_targ > 90 and alpha_targ <= 135):
-            R_targ = 3
+            R_targ = 2
         elif (alpha_targ > 135 and alpha_targ <= 180):
-            R_targ = 4
+            R_targ = 3
         elif (alpha_targ < 0 and alpha_targ >= -45):
-            R_targ = 5
+            R_targ = 7
         elif (alpha_targ < -45 and alpha_targ >= -90):
             R_targ = 6
         elif (alpha_targ < -90 and alpha_targ >= -135):
-            R_targ = 7
+            R_targ = 5
         elif (alpha_targ < -135 and alpha_targ >= -180):
-            R_targ = 8
+            R_targ = 4
         
         if d_uo < self.sensor_fov:
             #object is in fov
@@ -459,45 +469,59 @@ class Drone(Point):
             alpha_obs = atan2(del_obs_x, del_obs_y) * (180.0/pi)
             
             #region check
-            if (alpha_obs > 0 and alpha_obs <= 45):
-                R_obs = 1
+            if (alpha_obs >= 0 and alpha_obs <= 45):
+                R_obs = 0
             elif (alpha_obs > 45 and alpha_obs <= 90):
-                R_obs = 2
+                R_obs = 1
             elif (alpha_obs > 90 and alpha_obs <= 135):
-                R_obs = 3
+                R_obs = 2
             elif (alpha_obs > 135 and alpha_obs <= 180):
-                R_obs = 4
+                R_obs = 3
             elif (alpha_obs < 0 and alpha_obs >= -45):
-                R_obs = 5
+                R_obs = 7
             elif (alpha_obs < -45 and alpha_obs >= -90):
                 R_obs = 6
             elif (alpha_obs < -90 and alpha_obs >= -135):
-                R_obs = 7
+                R_obs = 5
             elif (alpha_obs < -135 and alpha_obs >= -180):
-                R_obs = 8
+                R_obs = 4
                 
             #get direction of moving object
             D_obs = moving_obstacle.move_dir
             
             #calculate the angle betwee the target and moving obstacle
-            k = (targ_y - self_y)/(targ_x - self_x);
-            b = self_y - k * self_x
             
-            d_o_line = abs( moving_obs_x - k * self_y - b)/sqrt(k**2 + b**2)
+            #if the target and uav have the same horizontal position,
+            #slope is infinite and can't calculate line equation.
+            #in this case, d_o_line is just the difference between uav
+            #and moving obstacle x positions
+            delUT_x = targ_x - self_x
+            if (delUT_x != 0):
+                k = (targ_y - self_y)/(targ_x - self_x);
+                b = self_y - k * self_x
+                
+                d_o_line = abs( moving_obs_x - k * self_y - b)/sqrt(k**2 + b**2)
+            else:
+                d_o_line = abs( moving_obs_x - self_x )
             
             #calculate the angle
-            alpha_o_line = asin( d_o_line / d_uo );
+            alpha_o_line = asin( d_o_line / d_uo )
             self.alpha_o_line = alpha_o_line
         
             #check the region alpha_o_line is in
+            #the range of arsin(x) is restricted to [-pi/2, pi/2], 
+            #paper seems to be confused ?
             if alpha_o_line >= 0 and alpha_o_line < pi/8:
-                A_targ_obs = 1
+                A_targ_obs = 0
             elif alpha_o_line >= pi/8 and alpha_o_line < pi/4:
-                A_targ_obs = 2
+                A_targ_obs = 1
             elif alpha_o_line >= pi/4 and alpha_o_line < 3*pi/8:
-                A_targ_obs = 3
+                A_targ_obs = 2
             elif alpha_o_line >= 3*pi/8 and alpha_o_line < pi/2:
-                A_targ_obs = 4
+                A_targ_obs = 3
+            print("Current value of alpha_o_line = " + str(alpha_o_line))
+            print("A_targ_obs = " + str(A_targ_obs))
+            """
             elif alpha_o_line >= pi/2 and alpha_o_line < 5*pi/8:
                 A_targ_obs = 5
             elif alpha_o_line >= 5*pi/8 and alpha_o_line < 3*pi/4:
@@ -506,7 +530,8 @@ class Drone(Point):
                 A_targ_obs = 7
             elif alpha_o_line >= 7*pi/8 and alpha_o_line < pi:
                 A_targ_obs = 8
-        
+            """
+            
         return R_obs, D_obs, R_targ, A_targ_obs
         
     def checkObsInFov(self):
