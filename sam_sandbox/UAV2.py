@@ -52,6 +52,10 @@ class UAV(Env):
                                             high = np.zeros(self.observation_shape), 
                                             dtype = np.float16)
         
+        #normalization factor for rewards and state features
+        self.normFactor = sqrt( self.observation_shape[0] ** 2 + self.observation_shape[1] ** 2)
+        
+        
         #create canvas for image
         self.canvas = np.ones(self.observation_shape) * 1
         
@@ -79,7 +83,7 @@ class UAV(Env):
             self.canvas[y : y + elem_shape[1], x : x + elem_shape[0]] = elem.icon
             
         #text = 'Rewards: {}, Penalties: {}, Episode #: {}'.format(self.ep_return, self.penalties, self.episode)
-        text = 'R: {:.1f}, Ep: {:.0f}'.format(self.cum_reward, self.episode)
+        text = 'R_sum: {:.1f}, Ep: {:.0f}'.format(self.cum_reward, self.episode)
         font = cv2.FONT_HERSHEY_SIMPLEX
         
         self.canvas = cv2.putText(self.canvas, text, (10,20), 
@@ -179,12 +183,12 @@ class UAV(Env):
         self.final_distance = self.calcDistance(x, x_targ, y, y_targ)
         
         #calcualte initial state feature
-        self.init_feature[0] = self.drone.state[0] #initial uav position (x)
-        self.init_feature[1] = self.drone.state[1] #initial uav position (y)
-        self.init_feature[2] = np.abs(self.drone.state[0] - x_targ) #initial relative position (x)
-        self.init_feature[3] = np.abs(self.drone.state[1] - y_targ) #initial relative position (y)
-        self.init_feature[4] = self.drone.state[2] # initial velocity (x)
-        self.init_feature[5] = self.drone.state[3] # initial velocity (y)
+        self.init_feature[0] = self.drone.state[0]/self.normFactor #initial uav position (x)
+        self.init_feature[1] = self.drone.state[1]/self.normFactor #initial uav position (y)
+        self.init_feature[2] = (self.drone.state[0] - x_targ)/self.normFactor #initial relative position (x)
+        self.init_feature[3] = (self.drone.state[1] - y_targ)/self.normFactor #initial relative position (y)
+        self.init_feature[4] = self.drone.state[2]/self.normFactor # initial velocity (x)
+        self.init_feature[5] = self.drone.state[3]/self.normFactor # initial velocity (y)
         
         ##init obstacles
         x_obs, y_obs = [np.zeros(self.nObstacles, dtype = int) for i in range(2)]
@@ -241,13 +245,13 @@ class UAV(Env):
         x_drone_dot, y_drone_dot = self.drone.get_position()
         vx_drone_dot, vy_drone_dot = self.drone.get_velocity()
         
-        #set state features
-        self.state_feature[0] = x_drone_dot
-        self.state_feature[1] = y_drone_dot
-        self.state_feature[2] = abs(x_drone_dot - x_targ)
-        self.state_feature[3] = abs(y_drone_dot - y_targ)
-        self.state_feature[4] = vx_drone_dot
-        self.state_feature[5] = vy_drone_dot
+        #set state features, normalize
+        self.state_feature[0] = x_drone_dot/self.normFactor
+        self.state_feature[1] = y_drone_dot/self.normFactor
+        self.state_feature[2] = (x_drone_dot - x_targ)/self.normFactor
+        self.state_feature[3] = (y_drone_dot - y_targ)/self.normFactor
+        self.state_feature[4] = vx_drone_dot/self.normFactor
+        self.state_feature[5] = vy_drone_dot/self.normFactor
         
         """
         print("state feature px = " + str(self.state_feature[0]))
@@ -261,12 +265,13 @@ class UAV(Env):
         self.final_distance = d_s
         
         #set Rd part of reward
-        Rd = -d_s
+        #normalize to shape of space
+        Rd = -d_s/self.normFactor
         reward_t += Rd
         
         #check to see if target and drone have collided, if so, fin
         if self.has_collided(self.drone, self.target) or (d_s < self.distThreshold):
-            reward_t += 10
+            reward_t += 30
             done = True
             
         #check collisions with all obstacles

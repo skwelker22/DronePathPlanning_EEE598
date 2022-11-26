@@ -222,21 +222,30 @@ plt.colorbar()
 plt.title("$log( |max(Q_{high})| )$")
 """
 
-## FILTER FINAL DISTANCE
+## MAF FINAL DISTANCE
 mafLen = 100.0
 imgDims = 32.0
 bb = np.repeat(1./mafLen, mafLen)
+
 normFinalDist = np.subtract(np.asarray(final_distance), imgDims)
 filtFinalDist = signal.lfilter(bb, 1, normFinalDist)
 plt.figure(445)
-plt.plot( filtFinalDist ) 
+plt.xlabel("Episode #", size = 16)
+plt.ylabel("Miss Distance [pixels]", size = 16)
+plt.xticks(size = 15), plt.yticks(size=15)
+plt.grid(True)
+plt.plot( filtFinalDist, linewidth = 4 ) 
 plt.show()
 
 #filter penalties
 successes = np.subtract(1, all_penalties)
 successFilt = signal.lfilter(bb, 1, successes)
 plt.figure(446)
-plt.plot( successFilt )
+plt.xlabel("Episode #", size = 16)
+plt.ylabel("Success Rate", size = 16)
+plt.xticks(size = 15), plt.yticks(size=15)
+plt.grid(True)
+plt.plot( successFilt, linewidth = 4 )
 plt.show()
 
 

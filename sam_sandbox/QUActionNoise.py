@@ -9,7 +9,6 @@ import numpy as np
 
 #class that implements Ornstei-Uhlenbeck process for generating noise in order
 #to obtain better exploration from the Actor network
-
 class QUActionNoise:
     def __init__(self, mean, std_deviation, theta=0.15, dt=1e-2, x_initial=None):
         self.theta = theta
@@ -21,7 +20,6 @@ class QUActionNoise:
 
     def __call__(self):
         # Formula taken from https://www.wikipedia.org/wiki/Ornstein-Uhlenbeck_process.
-        self.dt = 1
         x = (
             self.x_prev
             + self.theta * (self.mean - self.x_prev) * self.dt
