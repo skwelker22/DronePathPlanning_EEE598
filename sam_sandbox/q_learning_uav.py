@@ -6,7 +6,7 @@ Created on Sat Sep 17 20:42:15 2022
 """
 
 from UAV import UAV
-from IPython import display
+# from IPython import display
 #from time import sleep
 import numpy as np
 import random
@@ -134,7 +134,6 @@ for i in range(1, nEpisodes+1):
         env.render()
     
     if i % 100 == 0:
-        display.clear_output(wait=True)
         print(f"Episode: {i}")
     
     #save off epoch array
