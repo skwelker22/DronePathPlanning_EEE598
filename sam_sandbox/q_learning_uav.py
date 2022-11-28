@@ -22,7 +22,7 @@ epsilon = 0.1 #for epsilon-greedy
 lamb = 0.2 #discount factor
 T0 = 100 #initial value of temp param
 max_iter = 500
-nEpisodes = int(750)
+nEpisodes = int(1000)
 
 #beta terms for higher layer reward
 b1 = 0.55
@@ -46,6 +46,8 @@ high_tuple = (8,2,8,4,n_actions)
 q_table_high = np.zeros(high_tuple)
 
 all_epochs, all_penalties, final_distance = [list() for i in range(3)]
+ep_reward_list = []
+avg_reward_list = []
 
 for i in range(1, nEpisodes+1):
     #reset and render
@@ -55,6 +57,7 @@ for i in range(1, nEpisodes+1):
     #reinit current episode vars
     epochs, penalties, reward = [0 for i in range(3)]
     done = False
+    episodic_reward = 0
     
     while not done:
         
@@ -86,6 +89,8 @@ for i in range(1, nEpisodes+1):
         
         #state transition
         state_dot_grid, reward, state_dot_high, reward_high, done = env.step(action)
+        
+        episodic_reward += env.reward
         
         #get new states after action has taken place
         state_dot_x, state_dot_y = env.drone.get_position()
@@ -140,10 +145,22 @@ for i in range(1, nEpisodes+1):
     all_epochs.append(epochs)
     all_penalties.append(penalties)
     final_distance.append(env.final_distance)
-        
+    ep_reward_list.append(episodic_reward)
+    avg_reward = np.mean(ep_reward_list[-100:])
+    avg_reward_list.append(avg_reward)    
 
 #q-training finished
 print("Training finished.\n")
+
+# Plotting graph
+# Episodes versus Avg. Rewards
+plt.figure(22)
+plt.plot(avg_reward_list, linewidth = 4)
+plt.xlabel("Episode", size = 16)
+plt.ylabel("Avg. Epsiodic Reward", size = 16)
+plt.xticks(size = 15), plt.yticks(size=15)
+plt.grid(True)
+plt.show()
 
 #create plots
 fig, ax = plt.subplots(2)

@@ -36,3 +36,17 @@ d_s = sqrt((x_drone-x_targ)^2 + (y_drone-y_targ)^2)
 d_s_matlab = norm([(x_drone-x_targ); (y_drone-y_targ)])
 
 
+%% T
+
+dmin = 100;
+dstep = 0.1;
+dl = [dstep:dstep:dmin-dstep];
+
+T = -exp(1 - dmin^2./(dmin^2 - dl.^2 + 1e-4));
+
+figure(222); hold on;
+plot( dl, T );
+xlabel('$d_l$', 'interpreter','latex');
+ylabel('$T$', 'interpreter','latex');
+legend("$d_{min} = 100 \ [pixels]$", 'interpreter', 'latex');
+

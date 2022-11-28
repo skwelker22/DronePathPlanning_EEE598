@@ -156,8 +156,8 @@ def update_target(target_weights, weights, tau):
 def get_actor(num_states, action_upper_bound):
     # Initialize weights between -3e-3 and 3-e3
     #last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
-    #last_init = tf.random_uniform_initializer(minval=-0.0000003, maxval=0.0000003)
-    last_init = tf.random_uniform_initializer(minval=-0.00003, maxval=0.00003)
+    last_init = tf.random_uniform_initializer(minval=-0.000003, maxval=0.000003)
+    #last_init = tf.random_uniform_initializer(minval=-0.0003, maxval=0.00003)
 
     inputs = layers.Input(shape=(num_states,))
     out = layers.Dense(256, activation="relu")(inputs)
@@ -221,7 +221,7 @@ def policy(state, noise_object, action_bounds):
 ###################
 # max iterations per episode
 max_iter = 400
-total_episodes = 750
+total_episodes = 1000
 
 #define number of states based on feature s_t
 #s_t = [p_uav, (p_uav - p_target), v_uav] (x/y components)
@@ -238,7 +238,7 @@ action_bounds = [angMin, angMax]
 #define and reset environment
 env = UAV(n_states, action_bounds, dT)
 
-std_dev = math.pi/15
+std_dev = math.pi/12
 #std_dev = 0.2
 ou_noise = QUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
 
@@ -283,6 +283,9 @@ avg_reward_list = []
 all_penalties = []
 final_distance = []
 
+#create dictionary to save off actions for each episode
+yaw_dict = {}
+
 # Takes about 4 min to train
 for ep in range(total_episodes):
 
@@ -294,6 +297,7 @@ for ep in range(total_episodes):
     episodic_reward = 0
     ep_iter = 0
     penalties = 0
+    yaw_ep = []
 
     while True:
 
@@ -305,6 +309,9 @@ for ep in range(total_episodes):
 
         #draw action according to the policy (using the actor network)
         action = policy(tf_prev_state, ou_noise, action_bounds)
+        
+        #append current action to yaw list
+        yaw_ep.append(math.degrees(float(action[0])))
         #print("current action chosen by policy is [deg] = " + str(math.degrees(float(action[0]))))
         #debug
         """
@@ -330,28 +337,33 @@ for ep in range(total_episodes):
         #update the target networks with actor/critic models
         update_target(target_actor.variables, actor_model.variables, tau)
         update_target(target_critic.variables, critic_model.variables, tau)
+        
+        #render environment for visualization
+        env.render()
 
         # End this episode when `done` is True
         if done:
             break
         
         #check if uav collided with objects, if so end
-        if env.check_obj_collided() or (ep_iter > max_iter):
+        if env.check_obj_collided() or (ep_iter > max_iter) \
+            or (episodic_reward < -200.0):
             penalties += 1
             break
         
         #overwrite previous state with new state
         prev_state[:] = state[:]
-        
-        #render environment for visualization
-        env.render()
 
     ep_reward_list.append(episodic_reward)
     all_penalties.append(penalties)
     final_distance.append(env.final_distance)
-
-    # Mean of last 40 episodes
-    avg_reward = np.mean(ep_reward_list[-40:])
+    
+    #save off yaw_ep to dict
+    yaw_dict['ep_' + str(ep)] = yaw_ep
+    
+    # Mean of last nAvg episodes
+    nAvg = 100
+    avg_reward = np.mean(ep_reward_list[-nAvg:])
     print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward))
     avg_reward_list.append(avg_reward)
 

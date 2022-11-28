@@ -34,7 +34,8 @@ class UAV(Env):
         self.obj_collided = False
         self.cum_reward = 0
         self.final_distance = None
-        self.distThreshold = 64 #starts givng + 10 reward when uav is within 64 pixels
+        #starts givng + 10 reward when uav gets close to target
+        self.distThreshold = 64 + 32 
         self.state_feature = np.zeros((num_states,))
         self.init_feature = np.zeros((num_states,))
         
@@ -132,20 +133,22 @@ class UAV(Env):
  
         #get grid world shape
         grid_x = self.observation_shape[0]
+        grid_y = self.observation_shape[1]
         
         #check to see if the drone position is touching the boundry
         #define conditions
-        left_edge = (drone_x - drone.icon_w/2) <= 0
-        right_edge = (drone_x + drone.icon_w/2) >= grid_x
-        bottom_edge = (drone_y + drone.icon_h/2) >= self.y_max
-        top_edge = (drone_y - drone.icon_h/2) <= self.y_min
+        left_edge = (drone_x - drone.icon_w) <= 0
+        right_edge = (drone_x + drone.icon_w) >= grid_x
+        bottom_edge = (drone_y + drone.icon_h) >= self.y_max
+        top_edge = (drone_y) <= self.y_min
         
         if left_edge or right_edge:
             x_col = True
             
         if top_edge or bottom_edge:
             y_col = True
-            
+        
+        #if left_edge or top_edge:
         if x_col or y_col:
             return True
         
@@ -169,12 +172,14 @@ class UAV(Env):
         self.drone.state[1] = y
         self.drone.state[2] = 1.0  #1 pixel / second
         self.drone.state[3] = 0.0  #1 pixel / second
-        self.drone.state[4] = 0.002  #0.5 pixel / second/ second
+        self.drone.state[4] = 0.0  #0.5 pixel / second/ second
         self.drone.state[5] = 0.0   
         
         #initialize the target location
+        #x_targ = int(self.observation_shape[0] * 0.30)
+        #y_targ = int(self.observation_shape[1] * 0.80)
         x_targ = int(self.observation_shape[0] * 0.90)
-        y_targ = int(self.observation_shape[1] * 0.90)
+        y_targ = int(self.observation_shape[1] * 0.85)
         
         self.target = Target("target", self.x_max, self.x_min, self.y_max, self.y_min, self.dT)
         self.target.set_position(x_targ, y_targ)
@@ -269,22 +274,94 @@ class UAV(Env):
         Rd = -d_s/self.normFactor
         reward_t += Rd
         
+        ###################################################
+        #####  add in T reward that describes the threat 
+        ###################################################
+        #calculate equation for LOS
+        m_los = (y_drone_dot - y_targ) / (x_drone_dot - x_targ)
+        b_los = y_drone_dot - m_los * x_drone_dot
+        
+        #calculate perpendicular slope
+        m_perp = -1/m_los
+        
+        #calculate equation of uav line and target line
+        #get y - intercepts
+        b_uav  = y_drone_dot - m_perp * x_drone_dot
+        b_targ = y_targ - m_perp * x_targ
+        
+        #find minimum distance from self to each obstacle
+        d_min = 1e3 #init to something large
+        T_reward = 0
+        for obj in self.obs:
+            x_obs, y_obs = obj.get_position()
+            d_obs = self.calcDistance(x_drone_dot, x_obs, y_drone_dot, y_obs)
+            if (d_obs < d_min):
+                d_min = d_obs
+            
+            #check if the obstacles are in the threat area, closer to target
+            # or closer to uav
+            
+            #generate second point on uav and targ lines
+            x_uav2  = 100
+            x_targ2 = 100
+            y_uav2  = m_perp * x_uav2 + b_uav
+            y_targ2 = m_perp * x_targ2 + b_targ
+            
+            #calculate determinant and check sign
+            detSgnUav = (x_uav2 - x_drone_dot) * (y_obs - y_drone_dot) - \
+                (x_obs - x_drone_dot) * (y_uav2 - y_drone_dot)
+            detSgnTarg = (x_targ2 - x_targ) * (y_obs - y_targ) - \
+                (x_obs - x_targ) * (y_targ2 - y_targ)
+            
+            if detSgnUav > 0: #obstacle left of uav line
+                if (d_obs < d_min):
+                    T_reward += exp(1 - d_min ** 2 / (d_min ** 2 - d_obs ** 2 + 1e-4))
+            
+            elif detSgnTarg < 0: #obstacle right of targ line
+                d_obs_targ = self.calcDistance(x_obs, x_targ, y_obs, y_targ)
+                if (d_obs_targ < d_min):
+                    T_reward += exp(1 - d_min ** 2 / (d_min ** 2 - d_obs ** 2 + 1e-4))
+                
+            else:   
+                #calculate the dl term for each obstacle
+                #dl is the distance between the LOS line and obstacle
+                #assume all obstacles are in the inner region
+                b_obs = y_obs - m_perp * x_obs
+            
+                #find the a,b,c terms for the intersection point equation
+                #https://www.cuemath.com/geometry/intersection-of-two-lines/
+                x_intersect = (b_obs - b_los) / (m_los - m_perp)
+                y_intersect = m_los * x_intersect + b_los
+            
+                d_intersect = self.calcDistance(x_obs, x_intersect, y_obs, y_intersect)
+            
+                #check if dl < d_min
+                if d_intersect < d_min:
+                    T_reward += exp(1 - d_min ** 2 / (d_min ** 2 - d_intersect ** 2 + 1e-4))
+        
+        #add in T_reward to current episode reward
+        reward_t += -T_reward
+        
+        #if within dist threshold start giving big rewards
+        if (d_s < self.distThreshold):
+            reward_t += 10
+        
         #check to see if target and drone have collided, if so, fin
-        if self.has_collided(self.drone, self.target) or (d_s < self.distThreshold):
-            reward_t += 30
+        if self.has_collided(self.drone, self.target):
+            reward_t += 50
             done = True
             
         #check collisions with all obstacles
         self.obj_collided = False
         for obj in self.obs:
             if self.has_collided(self.drone, obj):
-                reward_t += -2 #fixed -2 when uav collides with obstacle
+                reward_t += -10 #fixed -2 when uav collides with obstacle
                 self.obj_collided = True
                 break
         
         #check for collisions with the boundry of the grid space
         if self.has_collided_with_boundry(self.drone):
-            reward_t += -20
+            reward_t += -100 
             self.obj_collided = True
         
         #increment cummulative reward
@@ -335,10 +412,10 @@ class Drone(Point):
         self.icon = cv2.resize(self.icon, (self.icon_h, self.icon_w))
         
         #initialize position and set origin
-        self.x_origin = x0
-        self.y_origin = y0
-        self.x = x0
-        self.y = y0
+        self.x_origin = self.clamp(x0, self.x_min, self.x_max - self.icon_w)
+        self.y_origin = self.clamp(y0, self.y_min, self.y_max - self.icon_h)
+        self.x = self.clamp(x0, self.x_min, self.x_max - self.icon_w)
+        self.y = self.clamp(y0, self.y_min, self.y_max - self.icon_h)
         
         #sensor properties
         #half drone img dimension + half obj image dimension + 29 pixels
@@ -370,7 +447,7 @@ class Drone(Point):
         
         #create C from scratch
         C = np.array([[cos(yaw), -sin(yaw)],[sin(yaw), cos(yaw)]])
-        cmd_power = 0.1
+        cmd_power = 0.001
         a_cmd = np.dot(C, cmd_power * np.array([1,0]))
         
         #add in command x_dot = Ax + Bus

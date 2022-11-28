@@ -194,11 +194,11 @@ class UAV(Env):
         curr_move_obs_x, curr_move_obs_y = self.moving_obs.get_position()
         d_uo = self.calcDistance(x_drone_dot, curr_move_obs_x, y_drone_dot, curr_move_obs_y)
         
-        #if curr_move_obs_x < int(self.observation_shape[0] * 0.40):
-        if curr_move_obs_x < int(self.observation_shape[0] * 0.10):
+        if curr_move_obs_x < int(self.observation_shape[0] * 0.40):
+        #if curr_move_obs_x < int(self.observation_shape[0] * 0.10):
             self.moving_obs.set_move_dir(0)
-        #elif curr_move_obs_x > int(self.observation_shape[0] * 0.80):
-        elif curr_move_obs_x > int(self.observation_shape[0] * 0.3):
+        elif curr_move_obs_x > int(self.observation_shape[0] * 0.80):
+        #elif curr_move_obs_x > int(self.observation_shape[0] * 0.3):
             self.moving_obs.set_move_dir(1)
         
         if self.moving_obs.move_dir == 0:
@@ -288,10 +288,10 @@ class UAV(Env):
             pos_cnt += 1
         
         #initialize moving obstacles
-        #x_move_obs = int(self.observation_shape[0] * 0.75)
-        #y_move_obs = int(self.observation_shape[1] * 0.50)
-        x_move_obs = int(self.observation_shape[0] * 0.10)
-        y_move_obs = int(self.observation_shape[1] * 0.90)
+        x_move_obs = int(self.observation_shape[0] * 0.75)
+        y_move_obs = int(self.observation_shape[1] * 0.50)
+        #x_move_obs = int(self.observation_shape[0] * 0.10)
+        #y_move_obs = int(self.observation_shape[1] * 0.90)
         
         
         #set moving obstacle position
@@ -402,7 +402,7 @@ class Point(object):
 class Drone(Point):
     def __init__(self, name, x_max, x_min, y_max, y_min):
         super(Drone, self).__init__(name, x_max, x_min, y_max, y_min)
-        self.icon = cv2.imread("drone_basic.png") / 255.0
+        self.icon = cv2.imread("drone_top_down.png") / 255.0
         self.icon_w = 32
         self.icon_h = 32
         self.icon = cv2.resize(self.icon, (self.icon_h, self.icon_w))
