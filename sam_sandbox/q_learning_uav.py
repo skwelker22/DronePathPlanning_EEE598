@@ -23,7 +23,7 @@ epsilon = 0.1 #for epsilon-greedy
 lamb = 0.2 #discount factor
 T0 = 100 #initial value of temp param
 max_iter = 500
-nEpisodes = int(750)
+nEpisodes = int(1000)
 
 #beta terms for higher layer reward
 b1 = 0.55
@@ -46,6 +46,7 @@ high_tuple = (8,2,8,4,n_actions)
 #n_actions_high = env.action_space_high.n
 q_table_high = np.zeros(high_tuple)
 
+
 all_epochs, all_penalties, final_distance, all_reward = [list() for i in range(4)]
 
 for i in range(1, nEpisodes+1):
@@ -56,6 +57,7 @@ for i in range(1, nEpisodes+1):
     #reinit current episode vars
     epochs, penalties, reward = [0 for i in range(3)]
     done = False
+    episodic_reward = 0
     
     while not done:
         
@@ -87,6 +89,8 @@ for i in range(1, nEpisodes+1):
         
         #state transition
         state_dot_grid, reward, state_dot_high, reward_high, done = env.step(action)
+        
+        episodic_reward += env.reward
         
         #get new states after action has taken place
         state_dot_x, state_dot_y = env.drone.get_position()
@@ -142,14 +146,27 @@ for i in range(1, nEpisodes+1):
     all_penalties.append(penalties)
     all_reward.append(reward)
     final_distance.append(env.final_distance)
-    print(env.reward)
 
+    print(env.reward)
+    ep_reward_list.append(episodic_reward)
+    avg_reward = np.mean(ep_reward_list[-100:])
+    avg_reward_list.append(avg_reward)    
 
 #q-training finished
 print("Training finished.\n")
 all_penalties = np.array(all_penalties)
 spars = len(all_penalties[all_penalties==0])/len(all_penalties)
 print("Total number of zero penalities: {} after {} episode, spars={}".format(len(all_penalties[all_penalties==0]), nEpisodes, spars))
+
+# Plotting graph
+# Episodes versus Avg. Rewards
+plt.figure(22)
+plt.plot(avg_reward_list, linewidth = 4)
+plt.xlabel("Episode", size = 16)
+plt.ylabel("Avg. Epsiodic Reward", size = 16)
+plt.xticks(size = 15), plt.yticks(size=15)
+plt.grid(True)
+plt.show()
 
 #create plots
 fig, ax = plt.subplots(3)
