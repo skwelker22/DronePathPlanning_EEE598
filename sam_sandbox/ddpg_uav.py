@@ -127,6 +127,9 @@ class Buffer:
         actor_optimizer.apply_gradients(
             zip(actor_grad, actor_model.trainable_variables)
         )
+        
+        #return gradients for monitoring
+        return critic_grad, actor_grad
 
     # We compute the loss and update parameters
     def learn(self):
@@ -143,7 +146,10 @@ class Buffer:
         reward_batch = tf.cast(reward_batch, dtype=tf.float32)
         next_state_batch = tf.convert_to_tensor(self.next_state_buffer[batch_indices])
 
-        self.update(state_batch, action_batch, reward_batch, next_state_batch)
+        critic_grad, actor_grad = \
+            self.update(state_batch, action_batch, reward_batch, next_state_batch)
+            
+        return critic_grad, actor_grad
 
 
 # This update target parameters slowly
@@ -221,7 +227,7 @@ def policy(state, noise_object, action_bounds):
 ###################
 # max iterations per episode
 max_iter = 400
-total_episodes = 1000
+total_episodes = 100
 
 #define number of states based on feature s_t
 #s_t = [p_uav, (p_uav - p_target), v_uav] (x/y components)
@@ -238,7 +244,7 @@ action_bounds = [angMin, angMax]
 #define and reset environment
 env = UAV(n_states, action_bounds, dT)
 
-std_dev = math.pi/12
+std_dev = math.pi/16
 #std_dev = 0.2
 ou_noise = QUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
 
@@ -285,6 +291,8 @@ final_distance = []
 
 #create dictionary to save off actions for each episode
 yaw_dict = {}
+critic_dict = {}
+actor_dict = {}
 
 # Takes about 4 min to train
 for ep in range(total_episodes):
@@ -332,7 +340,11 @@ for ep in range(total_episodes):
         episodic_reward += reward
         
         #train the replay buffer
-        buffer.learn()
+        critic_grad, actor_grad = buffer.learn()
+        
+        #append critic/actor to dict
+        critic_dict['ep'+str(ep)] = critic_grad
+        actor_dict['ep'+str(ep)] = actor_grad
         
         #update the target networks with actor/critic models
         update_target(target_actor.variables, actor_model.variables, tau)
@@ -347,7 +359,7 @@ for ep in range(total_episodes):
         
         #check if uav collided with objects, if so end
         if env.check_obj_collided() or (ep_iter > max_iter) \
-            or (episodic_reward < -200.0):
+            or (episodic_reward < -350.0):
             penalties += 1
             break
         
@@ -359,7 +371,7 @@ for ep in range(total_episodes):
     final_distance.append(env.final_distance)
     
     #save off yaw_ep to dict
-    yaw_dict['ep_' + str(ep)] = yaw_ep
+    #yaw_dict['ep_' + str(ep)] = yaw_ep
     
     # Mean of last nAvg episodes
     nAvg = 100
