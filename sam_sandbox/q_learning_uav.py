@@ -3,6 +3,7 @@
 Created on Sat Sep 17 20:42:15 2022
 
 @author: skwel
+@modified by Jian Meng 
 """
 
 from UAV import UAV
@@ -14,7 +15,7 @@ import matplotlib.pyplot as plt
 from scipy import signal
 
 # Hyper parameters
-alpha = 0.2 #learning rate
+alpha = 0.2 # learning rate
 alpha_low = 0.1
 beta = 0.9
 gamma = 0.4 #discount factor
@@ -45,9 +46,8 @@ high_tuple = (8,2,8,4,n_actions)
 #n_actions_high = env.action_space_high.n
 q_table_high = np.zeros(high_tuple)
 
-all_epochs, all_penalties, final_distance = [list() for i in range(3)]
-ep_reward_list = []
-avg_reward_list = []
+
+all_epochs, all_penalties, final_distance, all_reward = [list() for i in range(4)]
 
 for i in range(1, nEpisodes+1):
     #reset and render
@@ -135,7 +135,7 @@ for i in range(1, nEpisodes+1):
             epochs = max_iter
             penalties += 1
     
-        #render drone/target
+        # #render drone/target
         env.render()
     
     if i % 100 == 0:
@@ -144,13 +144,19 @@ for i in range(1, nEpisodes+1):
     #save off epoch array
     all_epochs.append(epochs)
     all_penalties.append(penalties)
+    all_reward.append(reward)
     final_distance.append(env.final_distance)
+
+    print(env.reward)
     ep_reward_list.append(episodic_reward)
     avg_reward = np.mean(ep_reward_list[-100:])
     avg_reward_list.append(avg_reward)    
 
 #q-training finished
 print("Training finished.\n")
+all_penalties = np.array(all_penalties)
+spars = len(all_penalties[all_penalties==0])/len(all_penalties)
+print("Total number of zero penalities: {} after {} episode, spars={}".format(len(all_penalties[all_penalties==0]), nEpisodes, spars))
 
 # Plotting graph
 # Episodes versus Avg. Rewards
@@ -163,7 +169,7 @@ plt.grid(True)
 plt.show()
 
 #create plots
-fig, ax = plt.subplots(2)
+fig, ax = plt.subplots(3)
 ax[0].plot(all_epochs)
 ax[0].set_ylabel('# Epochs')
 ax[0].set_xlabel("Episode #")
