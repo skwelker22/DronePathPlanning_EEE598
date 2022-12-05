@@ -4,7 +4,7 @@ Created on Sat Sep 17 20:26:45 2022
 
 Main Reference: https://blog.paperspace.com/creating-custom-environments-openai-gym/
 
-@author: skwel
+@authors: skwel (Sam Welker & Whitchurch Muthumani) (reward shaping and additional modifications by Whitchurch)
 """
 
 from gym import Env, spaces
@@ -27,6 +27,7 @@ class UAV(Env):
         self.alpha_low = alpha_low
         self.beta = beta
         self.obj_collided = False
+        self.target_collided = False
         self.reward = 0
         self.b1 = b1
         self.b2 = b2
@@ -192,7 +193,9 @@ class UAV(Env):
         reward = self.alpha_low * (d_s_minus - d_s) - self.beta * inverseObsSum
         
         #check to see if target and drone have collided, if so, fin
+        self.target_collided = False
         if self.has_collided(self.drone, self.target):
+            self.target_collided = True
             done = True
             
         #check collisions with all obstacles
@@ -214,9 +217,9 @@ class UAV(Env):
             self.moving_obs.set_move_dir(1)
         
         if self.moving_obs.move_dir == 0:
-            self.moving_obs.move(5, 0)
+            self.moving_obs.move(2, 0)
         elif self.moving_obs.move_dir == 1:
-            self.moving_obs.move(-5, 0)
+            self.moving_obs.move(-2, 0)
         
         next_move_obs_x, next_move_obs_y = self.moving_obs.get_position()
         d_uo_plus = self.calcDistance(x_drone_dot, next_move_obs_x, y_drone_dot, next_move_obs_y)
@@ -371,6 +374,9 @@ class UAV(Env):
      
     def calcDistance(self, x1, x2, y1, y2):
         return sqrt( (x1 - x2)**2 + (y1 - y2)**2 )
+   
+    def check_target_collided(self):
+        return self.target_collided
     
     def check_obj_collided(self):
         return self.obj_collided
